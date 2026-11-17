@@ -19,6 +19,7 @@ import java.util.Map;
 
 public class FeedbackHandler implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final int EVENTBRIDGE_MAX_ATTEMPTS = 3;
     private final DynamoDbClient db = DynamoDbClient.create();
     private final EventBridgeClient events = EventBridgeClient.create();
     private final String table = System.getenv("FEEDBACK_TABLE");
@@ -36,16 +37,36 @@ public class FeedbackHandler implements RequestHandler<APIGatewayProxyRequestEve
                     "dia", s(dia), "id", s(feedback.id()), "descricao", s(feedback.descricao()),
                     "nota", n(feedback.nota()), "urgencia", s(feedback.urgencia().name()), "data", s(feedback.data().toString()))).build());
             if (feedback.urgencia() == Feedback.Urgencia.CRITICA) {
-                events.putEvents(PutEventsRequest.builder().entries(PutEventsRequestEntry.builder()
-                        .eventBusName(bus).source("fiap.feedback").detailType("FeedbackCritico")
-                        .detail(JSON.writeValueAsString(feedback)).build()).build());
+                publishCriticalEvent(feedback);
             }
             return response(201, Map.of("id", feedback.id(), "urgencia", feedback.urgencia().name(), "data", feedback.data().toString()));
         } catch (IllegalArgumentException | com.fasterxml.jackson.core.JsonProcessingException e) { return response(400, Map.of("erro", e.getMessage())); }
+        catch (EventBridgePublicationException e) {
+            context.getLogger().log("Falha na publicação do evento crítico: " + e.getMessage());
+            return response(500, Map.of("erro", "Feedback armazenado, mas a notificação crítica não foi confirmada"));
+        }
         catch (Exception e) {
             context.getLogger().log("Falha ao processar feedback: " + e.getClass().getSimpleName());
             return response(500, Map.of("erro", "Não foi possível registrar o feedback"));
         }
+    }
+    private void publishCriticalEvent(Feedback feedback) {
+        var request = PutEventsRequest.builder().entries(PutEventsRequestEntry.builder()
+                .eventBusName(bus).source("fiap.feedback").detailType("FeedbackCritico")
+                .detail(writeFeedback(feedback)).build()).build();
+        EventBridgeResponsePublisher.publishWithRetries(request, events::putEvents,
+                EVENTBRIDGE_MAX_ATTEMPTS, FeedbackHandler::pauseBeforeRetry);
+    }
+    private static void pauseBeforeRetry(int attempt) {
+        try { Thread.sleep(100L * attempt); }
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new EventBridgePublicationException("Tentativa de publicação interrompida", e);
+        }
+    }
+    private static String writeFeedback(Feedback feedback) {
+        try { return JSON.writeValueAsString(feedback); }
+        catch (com.fasterxml.jackson.core.JsonProcessingException e) { throw new IllegalArgumentException("Não foi possível serializar o evento", e); }
     }
     private static AttributeValue s(String v) { return AttributeValue.builder().s(v).build(); }
     private static AttributeValue n(int v) { return AttributeValue.builder().n(Integer.toString(v)).build(); }
