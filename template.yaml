@@ -1,0 +1,147 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Plataforma de feedback serverless FIAP Fase 4 (Java 21)
+
+Parameters:
+  AdminEmail:
+    Type: String
+    Description: E-mail administrativo inscrito no tópico SNS (a inscrição precisa ser confirmada)
+    AllowedPattern: '^.+@.+\..+$'
+    ConstraintDescription: Informe um endereço de e-mail válido.
+
+Globals:
+  Function:
+    Runtime: java21
+    Architectures: [arm64]
+    MemorySize: 512
+    Timeout: 15
+    CodeUri: .
+    Environment:
+      Variables:
+        FEEDBACK_TABLE: !Ref FeedbackTable
+        ADMIN_TOPIC_ARN: !Ref AdminTopic
+        EVENT_BUS_NAME: !Ref FeedbackEventBus
+    Tracing: Active
+    LoggingConfig:
+      LogFormat: JSON
+
+Resources:
+  FeedbackApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: prod
+      Description: API pública para registro de feedback
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
+
+  FeedbackTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: dia
+          AttributeType: S
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: dia
+          KeyType: HASH
+        - AttributeName: id
+          KeyType: RANGE
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: false
+
+  AdminTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Alertas e relatórios de feedback
+      KmsMasterKeyId: alias/aws/sns
+
+  AdminEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: email
+      TopicArn: !Ref AdminTopic
+      Endpoint: !Ref AdminEmail
+
+  FeedbackEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Sub '${AWS::StackName}-feedback-events'
+
+  FeedbackFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: br.com.fiap.feedback.lambda.FeedbackHandler::handleRequest
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: !Ref FeedbackTable
+        - Statement:
+            - Effect: Allow
+              Action: events:PutEvents
+              Resource: !GetAtt FeedbackEventBus.Arn
+      Events:
+        CreateFeedback:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref FeedbackApi
+            Path: /avaliação
+            Method: POST
+
+  CriticalNotificationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: br.com.fiap.feedback.lambda.CriticalNotificationHandler::handleRequest
+      Policies:
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt AdminTopic.TopicName
+
+  CriticalFeedbackRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventBusName: !Ref FeedbackEventBus
+      EventPattern:
+        source: [fiap.feedback]
+        detail-type: [FeedbackCritico]
+      Targets:
+        - Id: CriticalNotificationTarget
+          Arn: !GetAtt CriticalNotificationFunction.Arn
+
+  CriticalFeedbackInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CriticalNotificationFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt CriticalFeedbackRule.Arn
+
+  WeeklyReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: br.com.fiap.feedback.lambda.WeeklyReportHandler::handleRequest
+      Timeout: 60
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref FeedbackTable
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt AdminTopic.TopicName
+      Events:
+        WeeklySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 9 ? * MON *)
+            Description: Envia o relatório dos sete dias completos anteriores toda segunda às 09h UTC
+            Enabled: true
+
+Outputs:
+  FeedbackEndpoint:
+    Description: Endpoint HTTP para registrar feedback
+    Value: !Sub 'https://${FeedbackApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod/avalia%C3%A7%C3%A3o'
+  AdminTopicArn:
+    Description: Tópico SNS de alertas críticos e relatórios semanais
+    Value: !Ref AdminTopic
+  FeedbackTableName:
+    Value: !Ref FeedbackTable
