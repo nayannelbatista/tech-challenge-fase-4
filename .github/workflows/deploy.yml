@@ -45,7 +45,7 @@ jobs:
         env:
           ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
         run: >-
-          sam deploy --stack-name fiap-feedback --resolve-s3 --capabilities CAPABILITY_IAM
+          sam deploy --stack-name fiap-tech-challenge-fase4 --resolve-s3 --capabilities CAPABILITY_IAM
           --region "${{ vars.AWS_REGION }}"
           --parameter-overrides "AdminEmail=${ADMIN_EMAIL}"
           --no-confirm-changeset --no-fail-on-empty-changeset

@@ -18,7 +18,7 @@ public class CriticalNotificationHandler implements RequestHandler<Map<String, O
                     + "\nUrgência: " + detail.path("urgencia").asText()
                     + "\nData: " + detail.path("data").asText();
             sns.publish(PublishRequest.builder().topicArn(System.getenv("ADMIN_TOPIC_ARN"))
-                    .subject("Feedback crítico").message(message).build());
+                    .subject("Feedback critico").message(message).build());
         } catch (Exception e) { context.getLogger().log("Falha na notificação: " + e.getClass().getSimpleName()); throw new RuntimeException(e); }
         return null;
     }

@@ -40,7 +40,7 @@ public class WeeklyReportHandler implements RequestHandler<Map<String, Object>, 
         var mensagens = SnsMessageChunker.split(header, linhas);
         for (var mensagem : mensagens) {
             sns.publish(PublishRequest.builder().topicArn(System.getenv("ADMIN_TOPIC_ARN"))
-                    .subject("Relatório semanal de feedbacks").message(mensagem).build());
+                    .subject("Relatorio semanal de feedbacks").message(mensagem).build());
         }
         context.getLogger().log("Relatório semanal enviado; total=" + resumo.total() + "; mensagens=" + mensagens.size());
         return null;

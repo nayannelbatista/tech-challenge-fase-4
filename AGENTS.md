@@ -20,7 +20,7 @@ Implementar a plataforma de feedback da Fase 4 em Java e AWS serverless, com foc
 - `README.md`: arquitetura, passos operacionais, segurança e demonstração.
 
 ## Convenções
-- API de feedback: `POST /avaliação`, JSON com `descricao` (string) e `nota` (inteiro entre 0 e 10).
+- API de feedback: `POST /avaliacao`, JSON com `descricao` (string) e `nota` (inteiro entre 0 e 10).
 - Feedback crítico: nota de 0 a 4 (configurável/documentada).
 - Datas e horários armazenados em UTC ISO-8601.
 - Identificadores e datas devem permitir consulta e agregação semanal com custo previsível.

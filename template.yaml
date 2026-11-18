@@ -88,7 +88,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref FeedbackApi
-            Path: /avaliação
+            Path: /avaliacao
             Method: POST
 
   CriticalNotificationFunction:
@@ -139,7 +139,7 @@ Resources:
 Outputs:
   FeedbackEndpoint:
     Description: Endpoint HTTP para registrar feedback
-    Value: !Sub 'https://${FeedbackApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod/avalia%C3%A7%C3%A3o'
+    Value: !Sub 'https://${FeedbackApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod/avaliacao'
   AdminTopicArn:
     Description: Tópico SNS de alertas críticos e relatórios semanais
     Value: !Ref AdminTopic

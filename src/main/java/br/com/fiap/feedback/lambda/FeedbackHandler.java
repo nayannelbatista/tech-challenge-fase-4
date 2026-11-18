@@ -64,8 +64,15 @@ public class FeedbackHandler implements RequestHandler<APIGatewayProxyRequestEve
             throw new EventBridgePublicationException("Tentativa de publicação interrompida", e);
         }
     }
-    private static String writeFeedback(Feedback feedback) {
-        try { return JSON.writeValueAsString(feedback); }
+    static String writeFeedback(Feedback feedback) {
+        try {
+            return JSON.writeValueAsString(Map.of(
+                    "id", feedback.id(),
+                    "descricao", feedback.descricao(),
+                    "nota", feedback.nota(),
+                    "urgencia", feedback.urgencia().name(),
+                    "data", feedback.data().toString()));
+        }
         catch (com.fasterxml.jackson.core.JsonProcessingException e) { throw new IllegalArgumentException("Não foi possível serializar o evento", e); }
     }
     private static AttributeValue s(String v) { return AttributeValue.builder().s(v).build(); }
